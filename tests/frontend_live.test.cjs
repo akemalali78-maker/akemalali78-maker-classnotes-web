@@ -20,7 +20,7 @@ function harness(customFetch) {
     const classes = new Set(["hidden"]), listeners = {};
     const el = {
       id, value: "", textContent: "", innerHTML: "", disabled: false,
-      dataset: {}, style: {}, width: 600, height: 120, listeners,
+      dataset: {}, style: {}, width: 600, height: 120, listeners, play: async () => {}, pause() {},
       classList: {
         add: (name) => classes.add(name), remove: (name) => classes.delete(name),
         contains: (name) => classes.has(name),
@@ -92,7 +92,7 @@ function harness(customFetch) {
       const stream = { track, getTracks: () => [track] };
       streams.push(stream); return stream;
     } } },
-    requestAnimationFrame: () => 1, cancelAnimationFrame() {},
+    requestAnimationFrame: () => 1, cancelAnimationFrame() {}, innerWidth: 1280, innerHeight: 800, scrollY: 0,
     getComputedStyle: () => ({ getPropertyValue: () => "" }),
     setTimeout: (fn, ms) => { const id = ++timerId; timers.set(id, { fn, ms }); return id; },
     clearTimeout: (id) => timers.delete(id),

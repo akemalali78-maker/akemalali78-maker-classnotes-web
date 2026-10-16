@@ -2,20 +2,18 @@
 (function () {
   "use strict";
 
-  /* ---------- 主题 ---------- */
-  const root = document.documentElement;
-  function applyTheme(t) {
-    root.setAttribute("data-theme", t);
-    document.getElementById("icon-moon").classList.toggle("hidden", t === "dark");
-    document.getElementById("icon-sun").classList.toggle("hidden", t !== "dark");
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", t === "dark" ? "#1A140C" : "#FFD000");
-    localStorage.setItem("cn_theme", t);
-  }
-  applyTheme(localStorage.getItem("cn_theme") || "light");
-  document.getElementById("btn-theme").addEventListener("click", () => {
-    applyTheme(root.getAttribute("data-theme") === "light" ? "dark" : "light");
-  });
+  /* ---------- 登录页背景：滚动位置驱动视频进度 ---------- */
+  const hero = document.getElementById("hero-video");
+  hero.src = "/static/media/ocean-" + (innerWidth < 700 ? 720 : 1280) + ".mp4";
+  hero.play().then(() => hero.pause()).catch(() => {}); // iOS 需先 play 一次才能 seek
+  addEventListener("touchstart", () => hero.play().then(() => hero.pause()).catch(() => {}), { once: true });
+  (function scrub() {
+    requestAnimationFrame(scrub);
+    if (document.getElementById("view-auth").classList.contains("hidden") || !hero.duration || hero.seeking) return;
+    const max = document.documentElement.scrollHeight - innerHeight;
+    const goal = hero.duration * Math.min(1, scrollY / Math.max(1, max));
+    if (Math.abs(goal - hero.currentTime) > .02) hero.currentTime += (goal - hero.currentTime) * .2;
+  })();
 
   /* ---------- 工具 ---------- */
   const $ = (id) => document.getElementById(id);
@@ -221,7 +219,7 @@
     box.dataset.sig = sig;
     if (!courses.length) {
       box.innerHTML =
-        '<div class="empty"><div class="empty-ill"></div>' +
+        '<div class="empty">' +
         "<h3>还没有课程</h3><p>把这学期的课加进来，<br>下次上课就能一键记录了。</p>" +
         '<button class="btn primary" id="empty-add">添加第一门课</button></div>';
       $("empty-add").addEventListener("click", () => openSheet());
@@ -469,7 +467,7 @@
     box.dataset.sig = sig;
     if (!notes.length) {
       box.innerHTML =
-        '<div class="empty"><div class="empty-ill"></div>' +
+        '<div class="empty">' +
         "<h3>还没记过这门课</h3><p>下课铃响之前，点「开始记录」，<br>重点、考点、论文素材都帮你整理好。</p></div>";
       return;
     }
