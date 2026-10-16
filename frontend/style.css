@@ -1,98 +1,50 @@
-/* ============================================================
-   课堂纪要 · 亮黄圆角
-   暖黄底 + 饱和黄主按钮 + 大圆角卡片。深色模式保留同一套黄强调。
-   装饰只用原创圆团形状，不使用任何角色贴图或标志。
-   ============================================================ */
+/* 课堂纪要 · 深海：深蓝底、白字、宋体标题、白色胶囊按钮。只有深色一套。 */
 :root {
-  --bg: #FFF3B0;
-  --surface: #FFFDF6;
-  --surface-2: #FFE9A0;
-  --border: #F3D36A;
-  --border-strong: #E2B63A;
-  --text: #3D2B12;
-  --text-2: #6E5424;
-  --text-3: #A4843E;
-  --accent: #FFD000;
-  --accent-strong: #E6A800;
-  --accent-soft: rgba(255, 208, 0, .28);
-  --accent-border: rgba(214, 150, 0, .45);
-  --accent-ink: #3D2B12;
-  --ink-accent: #6B3E00;
-  --blush: #FF8E7D;
-  --danger: #E15D4F;
-  --danger-soft: #FFE4DE;
-  --star-3: #D94B3D;
-  --star-3-bg: #FFE8E3;
-  --star-2: #C47A12;
-  --star-2-bg: #FFF1CC;
-  --star-1: #8A7040;
-  --star-1-bg: #FFF6DE;
-  --quote-border: #E6A800;
-  --quote-bg: #FFF8DC;
-  --radius-s: 14px;
-  --radius-m: 20px;
-  --radius-l: 28px;
-  --card-shadow: 0 3px 0 rgba(214, 160, 0, .18), 0 14px 28px rgba(180, 120, 0, .12);
-  --shadow-s: 0 2px 0 rgba(214, 160, 0, .14);
-  --shadow-m: 0 8px 20px rgba(180, 120, 0, .14);
-  --shadow-l: 0 24px 50px rgba(120, 70, 0, .18);
-  --topbar: rgba(255, 243, 176, .9);
-  --scrim: rgba(61, 43, 18, .4);
-  --btn-hi: #FFE566;
-  --btn-lo: #FFC400;
-  --btn-edge: #E0A400;
-  --ghost-shadow: 0 3px 0 rgba(180, 120, 0, .12);
-  --toast-bg: #3D2B12;
-  --toast-ink: #FFF6CC;
-  --pop-bg: radial-gradient(60% 90% at 30% 0%, rgba(255, 255, 255, .62), rgba(255, 255, 255, 0)),
-            linear-gradient(180deg, var(--btn-hi) 0%, var(--btn-lo) 100%);
-  --pop-shadow: inset 0 1px 0 rgba(255, 255, 255, .75),
-                inset 0 -3px 0 var(--btn-edge),
-                0 4px 0 rgba(180, 120, 0, .16),
-                0 10px 18px rgba(180, 120, 0, .16);
-  --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
-          "Noto Sans SC", "Microsoft YaHei", "Source Han Sans SC", sans-serif;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-}
-
-[data-theme="dark"] {
-  --bg: #1A140C;
-  --surface: #2A2116;
-  --surface-2: #3A2E1C;
-  --border: #4E3D24;
-  --border-strong: #6A5228;
-  --text: #FFF6E0;
-  --text-2: #E6D3A4;
-  --text-3: #B89A62;
-  --accent: #FFD84A;
-  --accent-strong: #FFE566;
-  --accent-soft: rgba(255, 216, 74, .16);
-  --accent-border: rgba(255, 216, 74, .42);
-  --accent-ink: #2A1C08;
-  --ink-accent: #FFD84A;
-  --blush: #FF9B8A;
+  color-scheme: dark;
+  --bg: #04121C;
+  --surface: #0A1F2D;
+  --surface-2: #11293A;
+  --border: #1B3A4E;
+  --border-strong: #2A5068;
+  --text: #F2F6F8;
+  --text-2: #B9C8D2;
+  --text-3: #7D93A2;
+  --accent: #E9F1F5;
+  --accent-strong: #FFFFFF;
+  --accent-soft: rgba(233, 241, 245, .10);
+  --accent-border: rgba(233, 241, 245, .28);
+  --accent-ink: #04121C;
+  --ink-accent: #CFE3EE;
   --danger: #FF8A78;
-  --danger-soft: #3A221C;
+  --danger-soft: #3A1E1C;
   --star-3: #FF9B8A;
-  --star-3-bg: #3A221C;
-  --star-2: #FFD84A;
-  --star-2-bg: #3A3014;
-  --star-1: #E6D3A4;
-  --star-1-bg: #332A1C;
-  --quote-border: #FFD84A;
-  --quote-bg: #2E2614;
-  --card-shadow: 0 10px 28px rgba(0, 0, 0, .35);
-  --shadow-s: 0 1px 2px rgba(0, 0, 0, .35);
+  --star-3-bg: #3A1E1C;
+  --star-2: #8FD3F4;
+  --star-2-bg: #0F3247;
+  --star-1: #B9C8D2;
+  --star-1-bg: #11293A;
+  --quote-border: #8FD3F4;
+  --quote-bg: #0C2536;
+  --radius-s: 12px;
+  --radius-m: 16px;
+  --radius-l: 22px;
+  --card-shadow: none;
+  --shadow-s: none;
   --shadow-m: 0 8px 22px rgba(0, 0, 0, .35);
   --shadow-l: 0 24px 56px rgba(0, 0, 0, .5);
-  --topbar: rgba(26, 20, 12, .9);
+  --topbar: rgba(4, 18, 28, .94);
   --scrim: rgba(0, 0, 0, .55);
-  --btn-hi: #FFE566;
-  --btn-lo: #FFC400;
-  --btn-edge: #C89200;
+  --btn-edge: transparent;
   --ghost-shadow: none;
-  --toast-bg: #FFD84A;
-  --toast-ink: #2A1C08;
+  --toast-bg: #E9F1F5;
+  --toast-ink: #04121C;
+  --pop-bg: var(--accent);
+  --pop-shadow: none;
+  --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+          "Noto Sans SC", "Microsoft YaHei", "Source Han Sans SC", sans-serif;
+  /* 系统宋体，不依赖外部字体服务（大陆可用） */
+  --serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -101,17 +53,9 @@ html { background: var(--bg); }
 body {
   margin: 0; padding: 0;
   background-color: var(--bg); color: var(--text);
-  background-image:
-    radial-gradient(880px 380px at -8% -12%, rgba(255, 214, 60, .7), transparent 58%),
-    radial-gradient(640px 300px at 108% -6%, rgba(255, 150, 110, .32), transparent 54%);
   font-family: var(--font);
   font-size: 16px; line-height: 1.7;
   -webkit-font-smoothing: antialiased;
-}
-[data-theme="dark"] body {
-  background-image:
-    radial-gradient(880px 380px at -8% -12%, rgba(255, 200, 40, .18), transparent 58%),
-    radial-gradient(640px 300px at 108% -6%, rgba(255, 140, 90, .1), transparent 54%);
 }
 
 #app { max-width: 720px; margin: 0 auto; min-height: 100dvh; }
@@ -140,7 +84,7 @@ main { padding: 0 20px calc(48px + env(safe-area-inset-bottom)); }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 /* ---------- 通用排版 ---------- */
-h2 { font-size: 24px; font-weight: 800; letter-spacing: .01em; margin: 0; color: var(--text); }
+h2 { font-family: var(--serif); font-size: 26px; font-weight: 500; letter-spacing: .01em; margin: 0; color: var(--text); }
 h3.section-title { font-size: 14px; font-weight: 600; color: var(--text-2); margin: 28px 0 12px; letter-spacing: .06em; }
 .page-head { padding: 26px 0 6px; }
 .page-sub { color: var(--text-2); font-size: 14px; margin: 6px 0 0; }
@@ -157,20 +101,14 @@ h3.section-title { font-size: 14px; font-weight: 600; color: var(--text-2); marg
 }
 .btn.block { width: 100%; }
 .btn.big { padding: 16px 18px; font-size: 16px; }
-/* 主按钮：亮黄圆钮，深棕字保证可读 */
+/* 主按钮：白色胶囊，深蓝字 */
 .btn.primary {
   color: var(--accent-ink);
   background: var(--pop-bg);
   border: 2px solid var(--btn-edge);
   box-shadow: var(--pop-shadow);
 }
-.btn.primary:active {
-  transform: translateY(2px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .4),
-    inset 0 -1px 0 var(--btn-edge),
-    0 2px 4px rgba(180, 120, 0, .2);
-}
+.btn.primary:active { transform: translateY(1px); opacity: .9; }
 .btn.soft {
   color: var(--ink-accent);
   font-weight: 800;
@@ -186,10 +124,7 @@ h3.section-title { font-size: 14px; font-weight: 600; color: var(--text-2); marg
   border: 2px solid var(--border);
   box-shadow: var(--ghost-shadow);
 }
-.btn.ghost:active {
-  transform: translateY(1px);
-  box-shadow: inset 0 2px 5px rgba(61, 43, 18, .08);
-}
+.btn.ghost:active { transform: translateY(1px); }
 .btn.ghost.danger { color: var(--danger); }
 /* 危险按钮：绛红物理按键 */
 .btn.danger-btn {
@@ -232,25 +167,21 @@ h3.section-title { font-size: 14px; font-weight: 600; color: var(--text-2); marg
 }
 .form-error { color: var(--danger); font-size: 13.5px; margin: 10px 0 0; text-align: center; }
 
-/* ---------- 登录页 ---------- */
-.auth-wrap { padding: 64px 4px 0; max-width: 380px; margin: 0 auto; }
-.brand { text-align: center; margin-bottom: 32px; }
-.brand-mark {
-  width: 92px; height: 92px; margin: 0 auto 16px;
-  border-radius: 50%; color: var(--accent-ink);
-  display: flex; align-items: center; justify-content: center;
-  background:
-    radial-gradient(circle at 35% 30%, #FFF6B0, #FFD000 58%, #F5B400);
-  border: 3px solid #E8B000;
-  box-shadow:
-    inset 0 -8px 0 rgba(200, 130, 0, .22),
-    0 8px 0 rgba(180, 120, 0, .16),
-    0 16px 28px rgba(180, 120, 0, .2);
+/* ---------- 登录页：滚动驱动的深海视频 ---------- */
+#view-auth { height: 260vh; }
+.hero-video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; background: var(--bg); }
+#view-auth::before { content: ""; position: fixed; inset: 0; z-index: 0; background: linear-gradient(0deg, rgba(4, 18, 28, .8), rgba(4, 18, 28, .3) 55%, rgba(4, 18, 28, .55)); }
+@media (max-width: 759px) {
+  #view-auth::before { background: linear-gradient(0deg, rgba(4, 18, 28, .8), rgba(4, 18, 28, .3) 48%, rgba(4, 18, 28, .78) 72%, rgba(4, 18, 28, .92)); }
 }
-.brand h1 { font-size: 30px; margin: 0; letter-spacing: .06em; color: var(--text); }
-.brand-sub { color: var(--text-2); font-size: 14.5px; margin: 8px 0 0; letter-spacing: .14em; }
+.auth-wrap { position: sticky; top: 0; z-index: 1; min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; padding: calc(24px + env(safe-area-inset-top)) 4px calc(24px + env(safe-area-inset-bottom)); max-width: 400px; margin: 0 auto; }
+.brand { margin-bottom: 26px; }
+.brand-eyebrow { color: var(--text); text-shadow: 0 1px 12px rgba(4, 18, 28, .6); font-size: 15px; margin: 0; }
+.brand h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(40px, 9vw, 56px); line-height: 1.12; letter-spacing: -.01em; margin: 10px 0 12px; color: var(--text); }
+.brand-sub { color: var(--text); font-size: 15px; margin: 0; text-shadow: 0 1px 12px rgba(4, 18, 28, .6); }
+.brand h1 { text-shadow: 0 2px 24px rgba(4, 18, 28, .45); }
 .auth-card {
-  background: var(--surface); border: 2px solid var(--border);
+  background: rgba(10, 31, 45, .88); border: 1px solid var(--border);
   border-radius: var(--radius-l); padding: 26px 22px;
   box-shadow: var(--card-shadow);
 }
@@ -262,9 +193,8 @@ h3.section-title { font-size: 14px; font-weight: 600; color: var(--text-2); marg
 }
 .auth-tab.active {
   background: var(--surface); color: var(--text);
-  box-shadow: 0 2px 0 rgba(180, 120, 0, .12);
 }
-.auth-foot { text-align: center; color: var(--text-3); font-size: 12.5px; margin-top: 22px; }
+.auth-foot { text-align: center; color: var(--text-2); font-size: 12.5px; margin-top: 22px; }
 
 /* ---------- 课程卡片 ---------- */
 #course-list { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
@@ -283,7 +213,6 @@ h3.section-title { font-size: 14px; font-weight: 600; color: var(--text-2); marg
   display: flex; align-items: center; justify-content: center;
   font-size: 19px; font-weight: 800;
   border: 2px solid var(--btn-edge);
-  box-shadow: inset 0 -3px 0 rgba(200, 130, 0, .2);
 }
 .course-info { flex: 1; min-width: 0; }
 .course-info h3 { margin: 0 0 4px; font-size: 16.5px; }
@@ -298,17 +227,6 @@ h3.section-title { font-size: 14px; font-weight: 600; color: var(--text-2); marg
 
 /* 空状态 */
 .empty { text-align: center; padding: 72px 24px; }
-.empty-ill {
-  width: 88px; height: 88px; margin: 0 auto 20px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #FFF6B0, #FFD000 60%, #F5B400);
-  position: relative; overflow: hidden;
-  border: 3px solid var(--btn-edge);
-  box-shadow: inset 0 -6px 0 rgba(200, 130, 0, .2);
-}
-.empty-ill::after {
-  content: ""; position: absolute; left: 24px; right: 24px; bottom: 26px; height: 16px;
-  border-bottom: 3px solid var(--accent-ink); border-radius: 0 0 20px 20px; opacity: .8;
-}
 .empty h3 { font-size: 17px; margin: 0 0 8px; }
 .empty p { color: var(--text-2); font-size: 14px; margin: 0 0 20px; }
 
