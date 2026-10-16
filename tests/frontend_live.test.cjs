@@ -77,7 +77,16 @@ function harness(customFetch) {
       getItem: (key) => storage.get(key) || null,
       setItem: (key, val) => storage.set(key, String(val)), removeItem: (key) => storage.delete(key),
     },
-    location: { hash: "" }, history: { back() {} },
+    location: {
+      hash: "",
+      replaced: "",
+      replace(next) {
+        const value = String(next);
+        this.replaced = value;
+        this.hash = value.includes("#") ? value.slice(value.indexOf("#")) : value;
+      },
+    },
+    history: { back() {} },
     navigator: { userAgent: "", mediaDevices: { getUserMedia: async () => {
       const track = { stops: 0, readyState: "live", stop() { this.stops++; this.readyState = "ended"; } };
       const stream = { track, getTracks: () => [track] };
@@ -212,6 +221,8 @@ async function start(h) {
   const first = h.recorders[0];
   assert.equal(first.state, "recording");
   assert.equal(first.timeslice, undefined, "segments must be independently recorded files");
+  assert.equal(h.context.location.hash, "#/live/s/abc123");
+  assert.equal(h.context.location.replaced, "#/live/s/abc123", "starting replaces the lobby history entry");
   await h.context.testHooks.route(); // Automatic hashchange immediately after starting.
   assert.equal(first.state, "recording", "route must not stop the newly started capture");
   assert.equal(h.streams[0].track.stops, 0);
@@ -406,4 +417,83 @@ async function start(h) {
   await wx.context.testHooks.openLiveLobby(1);
   assert.equal(wx.element("wechat-tip-lobby").classList.contains("hidden"), false);
   console.log("PASS: WeChat user agent shows a one-line system-browser tip");
+
+  const keptCheckpoint = harness();
+  await start(keptCheckpoint);
+  const savedLive = keptCheckpoint.storage.get("cn_live");
+  assert.ok(savedLive);
+  const paused = keptCheckpoint.context.testHooks.stopLive(false);
+  assert.equal(keptCheckpoint.storage.get("cn_live"), savedLive, "stopLive(false) must not drop the checkpoint");
+  keptCheckpoint.recorders[0].flushStop();
+  await paused;
+  const stillThere = JSON.parse(keptCheckpoint.storage.get("cn_live"));
+  assert.equal(stillThere.sid, "abc123");
+  assert.equal(stillThere.courseId, 1);
+  console.log("PASS: stopping without clearing the session keeps the live checkpoint");
+
+  const home = harness();
+  await start(home);
+  home.context.location.hash = "#/courses";
+  const goingHome = home.context.testHooks.route();
+  assert.equal(home.element("view-courses").classList.contains("hidden"), false);
+  assert.equal(home.element("view-live").classList.contains("hidden"), true);
+  assert.equal(home.recorders[0].stopPending, true, "home is painted before the recorder flush finishes");
+  assert.equal(home.storage.get("cn_live"), undefined, "leaving the session still clears its checkpoint");
+  assert.match(home.element("course-list").innerHTML, /测试课程/);
+  assert.doesNotMatch(home.element("course-list").innerHTML, /skel/);
+  home.recorders[0].flushStop();
+  await goingHome;
+  await flush();
+  assert.equal(home.records.find((r) => r.url === "/api/live/chunk").opts.body.get("session_id"), "abc123");
+  console.log("PASS: leaving live paints cached courses immediately and still uploads the final chunk");
+
+  const slot = { courses: null, notes: null };
+  const cached = harness((url) => {
+    if (url === "/api/courses" && slot.courses) return slot.courses;
+    if (String(url).includes("/notes") && slot.notes) return slot.notes;
+    if (String(url).includes("/notes")) {
+      return { ok: true, json: async () => [{ id: 3, title: "第一讲", recorded_at: "10-01" }] };
+    }
+  });
+  cached.storage.set("cn_token", "test-token");
+  cached.context.location.hash = "#/courses";
+  const firstDelay = deferred();
+  slot.courses = firstDelay.promise.then(() => ({
+    ok: true,
+    json: async () => [{ id: 1, name: "测试课程", mode: "考试", schedule_text: "周一 08:00" }],
+  }));
+  const firstHome = cached.context.testHooks.route();
+  assert.match(cached.element("course-list").innerHTML, /skel-card/);
+  firstDelay.resolve();
+  await firstHome;
+  assert.match(cached.element("course-list").innerHTML, /测试课程/);
+  assert.doesNotMatch(cached.element("course-list").innerHTML, /skel/);
+
+  const secondDelay = deferred();
+  slot.courses = secondDelay.promise.then(() => ({
+    ok: true,
+    json: async () => [{ id: 1, name: "新名字", mode: "考试", schedule_text: "周一 08:00" }],
+  }));
+  const secondHome = cached.context.testHooks.route();
+  assert.match(cached.element("course-list").innerHTML, /测试课程/);
+  assert.doesNotMatch(cached.element("course-list").innerHTML, /skel/);
+  secondDelay.resolve();
+  await secondHome;
+  assert.match(cached.element("course-list").innerHTML, /新名字/);
+
+  cached.context.location.hash = "#/course/1";
+  await cached.context.testHooks.route();
+  assert.equal(cached.element("course-name").textContent, "新名字");
+  assert.match(cached.element("note-list").innerHTML, /第一讲/);
+  const notesDelay = deferred();
+  slot.notes = notesDelay.promise.then(() => ({
+    ok: true,
+    json: async () => [{ id: 3, title: "第一讲", recorded_at: "10-01" }],
+  }));
+  const againCourse = cached.context.testHooks.route();
+  assert.match(cached.element("note-list").innerHTML, /第一讲/);
+  assert.doesNotMatch(cached.element("note-list").innerHTML, /skel/);
+  notesDelay.resolve();
+  await againCourse;
+  console.log("PASS: cached courses and notes paint immediately and refresh in the background");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
