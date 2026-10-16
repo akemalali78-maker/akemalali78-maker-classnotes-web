@@ -59,6 +59,14 @@
     window.scrollTo(0, 0);
   }
 
+  function isLanding(h) {
+    return h === "#/courses" || h === "#" || h === "#/";
+  }
+
+  // 只在本次打开后的第一次落到首页时，向服务器找未结束的场次。
+  // 用户主动离开后不再拉回；整页重载会重新武装。
+  let liveRestoreArmed = true;
+
   function route() {
     const h = location.hash || "#/courses";
     const mCourse = h.match(/^#\/course\/(\d+)$/);
@@ -66,13 +74,28 @@
     const mNote = h.match(/^#\/note\/(\d+)$/);
     const mLiveLobby = h.match(/^#\/live\/(\d+)$/);
     const mLiveSess = h.match(/^#\/live\/s\/([a-f0-9]+)$/);
-    if (!mLiveSess && !mLiveLobby && liveSessionId) stopLive().catch(() => {});
+    if (!mLiveSess && !mLiveLobby && liveSessionId) {
+      liveRestoreArmed = false; // 主动离开后不要立刻被拉回这场
+      stopLive().catch(() => {});
+    }
     if (!token()) return show("view-auth");
     if (mLiveSess) return openLiveSession(mLiveSess[1]);
     if (mLiveLobby) return openLiveLobby(+mLiveLobby[1]);
     if (mRecord) return openRecord(mRecord[1] ? +mRecord[1] : null);
     if (mNote) return openNote(+mNote[1]);
     if (mCourse) return openCourse(+mCourse[1]);
+    if (isLanding(h)) {
+      const ck = readCheckpoint();
+      if (ck && /^[a-f0-9]+$/.test(ck.sid)) {
+        const target = "#/live/s/" + ck.sid;
+        if (location.hash !== target) location.hash = target;
+        return openLiveSession(ck.sid);
+      }
+      if (liveRestoreArmed) {
+        liveRestoreArmed = false;
+        return Promise.resolve(openCourses()).then(seekActiveLive);
+      }
+    }
     return openCourses();
   }
   window.addEventListener("hashchange", route);
@@ -777,6 +800,112 @@
   let liveUploadQueue = Promise.resolve();
   const liveFailedChunks = [];
   const CHUNK_MS = 30000; // 每 30 秒一个切片
+  const QUESTION_WAIT_MS = 75 * 1000; // 超时未识别到讲解就收起，避免卡片一直占屏
+  const LIVE_KEY = "cn_live";
+  let liveRecordSegment = null, livePageLeaving = false, liveUseKeepalive = false;
+  let lastQuestions = [], qTick = null, qArchiveOpen = false;
+  const qDraft = new Map(), qLocal = new Map(), qDismissed = new Set();
+
+  function readCheckpoint() {
+    try {
+      const data = JSON.parse(localStorage.getItem(LIVE_KEY) || "null");
+      if (!data || !data.sid) return null;
+      return data;
+    } catch (e) { return null; }
+  }
+  function clearLiveCheckpoint() { localStorage.removeItem(LIVE_KEY); }
+  function saveLiveCheckpoint() {
+    if (!liveSessionId) return;
+    const drafts = {};
+    qDraft.forEach((v, k) => { if (v) drafts[k] = v; });
+    try {
+      localStorage.setItem(LIVE_KEY, JSON.stringify({
+        sid: liveSessionId, courseId: liveCourseId,
+        startTs: liveStartTs || Date.now(), seq: liveSeq, drafts: drafts,
+      }));
+    } catch (e) {}
+  }
+  function applyCheckpoint(sid) {
+    const ck = readCheckpoint();
+    if (!ck || ck.sid !== sid) return;
+    if (ck.courseId) liveCourseId = ck.courseId;
+    if (ck.startTs) liveStartTs = ck.startTs;
+    if (typeof ck.seq === "number" && ck.seq > liveSeq) liveSeq = ck.seq;
+    if (ck.drafts) Object.keys(ck.drafts).forEach((k) => qDraft.set(String(k), ck.drafts[k]));
+  }
+  function showWeChatTip() {
+    const wechat = /MicroMessenger/i.test(navigator.userAgent || "");
+    ["wechat-tip-lobby", "wechat-tip-live"].forEach((id) => $(id).classList.toggle("hidden", !wechat));
+  }
+  function ensureLiveTimer() {
+    if (!liveStartTs) return;
+    $("live-timer").textContent = fmtTime(Math.max(0, Date.now() - liveStartTs));
+    if (liveTimerId) return;
+    liveTimerId = setInterval(() => {
+      $("live-timer").textContent = fmtTime(Math.max(0, Date.now() - liveStartTs));
+    }, 1000);
+  }
+  function liveMicAlive() {
+    if (!liveStream || !liveStream.getTracks) return false;
+    return liveStream.getTracks().some((t) => t.readyState === "live");
+  }
+  function syncLiveMicUi() {
+    const btn = $("btn-live-resume"), note = $("live-mic-status"), endBtn = $("btn-live-end");
+    const ended = !!(endBtn && endBtn.disabled && /已结束/.test(endBtn.textContent || ""));
+    const active = $("live-active") && !$("live-active").classList.contains("hidden");
+    const show = !!(liveSessionId && active && !liveCapturing && !liveStarting && !liveEnding && !ended);
+    btn.classList.toggle("hidden", !show);
+    if (!show) { note.classList.add("hidden"); return; }
+    note.textContent = "麦克风已暂停。切到后台或分屏时系统通常会停掉录音；已上传的内容还在，点「继续录音」接着记。";
+    note.classList.remove("hidden");
+  }
+  function flushLiveCapture(opts) {
+    opts = opts || {};
+    if (!liveSessionId && !liveCapturing) return;
+    if (opts.leaving) livePageLeaving = true;
+    if (opts.keepalive) liveUseKeepalive = true;
+    saveLiveCheckpoint();
+    const recorder = liveRecorder;
+    if (recorder && recorder.state === "recording") {
+      try { recorder.stop(); } catch (e) {}
+    }
+  }
+  function onLiveVisible() {
+    livePageLeaving = false;
+    if (!liveSessionId) return;
+    if (liveCapturing && !liveMicAlive()) {
+      liveCapturing = false;
+      const recorder = liveRecorder;
+      if (recorder && recorder.state !== "inactive") {
+        try { recorder.stop(); } catch (e) {}
+      }
+      if (liveStream) {
+        liveStream.getTracks().forEach((t) => { try { t.stop(); } catch (e) {} });
+        liveStream = null;
+      }
+    } else if (liveCapturing && liveMicAlive() && liveRecordSegment &&
+               (!liveRecorder || liveRecorder.state !== "recording")) {
+      try { liveRecordSegment(); }
+      catch (e) { liveCapturing = false; }
+    }
+    syncLiveMicUi();
+  }
+  function seekActiveLive() {
+    if (!token() || !isLanding(location.hash || "#/courses")) return;
+    return api("/api/live/sessions").then((list) => {
+      if (!Array.isArray(list) || !isLanding(location.hash || "#/courses") || readCheckpoint()) return;
+      const active = list.filter((s) => s && s.status === "live")
+        .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))[0];
+      if (!active || !/^[a-f0-9]+$/.test(active.id || "")) return;
+      liveCourseId = active.course_id || liveCourseId;
+      liveSessionId = active.id;
+      if (active.created_at) liveStartTs = active.created_at * 1000;
+      saveLiveCheckpoint();
+      const target = "#/live/s/" + active.id;
+      if (location.hash !== target) location.hash = target;
+      return openLiveSession(active.id);
+    }).catch(() => {});
+  }
 
   async function openLiveLobby(courseId) {
     await stopLive();
@@ -791,6 +920,7 @@
       $("live-active").classList.add("hidden");
       $("live-course-name").textContent = "《" + course.name + "》";
       $("live-course-meta").textContent = courseTimeText(course) + " · " + course.mode + "考核";
+      showWeChatTip();
     } catch (e) { toast(e.message); }
   }
 
@@ -800,6 +930,9 @@
     if (sid !== liveSessionId) {
       await stopLive();
       liveSessionId = sid;
+      liveSeq = 0;
+      liveStartTs = 0;
+      liveShownSessionId = null;
     }
     show("view-live", "实时问答", true);
     $("topbar-title").textContent = "实时问答";
@@ -807,15 +940,23 @@
     $("live-active").classList.remove("hidden");
     if (liveShownSessionId !== sid) {
       liveShownSessionId = sid;
+      qDraft.clear();
+      qLocal.clear();
+      qDismissed.clear();
+      applyCheckpoint(sid);
       $("q-list").innerHTML = "";
       delete $("q-list").dataset.hash;
       $("stream").innerHTML = '<p class="stream-empty">正在连接…</p>';
       liveAfterSeq = -1;
-      $("live-timer").textContent = "00:00";
+      $("live-timer").textContent = liveStartTs ? fmtTime(Math.max(0, Date.now() - liveStartTs)) : "00:00";
       $("btn-live-end").disabled = false;
       $("btn-live-end").textContent = "下课，结束并生成纪要";
     }
+    ensureLiveTimer();
     if (!livePollId) startPoll();
+    showWeChatTip();
+    syncLiveMicUi();
+    saveLiveCheckpoint();
   }
 
   $("btn-live-start").addEventListener("click", async () => {
@@ -835,13 +976,17 @@
       const s = await api("/api/live/sessions", { method: "POST", json: { course_id: courseId } });
       if (location.hash !== lobbyHash) return;
       liveSessionId = s.id;
+      liveSeq = 0;
+      liveCourseId = courseId;
+      liveStartTs = Date.now();
+      saveLiveCheckpoint();
       await openLiveSession(s.id);
       $("live-title").textContent = s.title;
       startLiveCapture(stream, s.id);
       stream = null; // 由实时录音状态持有，结束时释放。
       location.hash = "#/live/s/" + s.id;
-      liveStartTs = Date.now();
-      liveTimerId = setInterval(() => { $("live-timer").textContent = fmtTime(Date.now() - liveStartTs); }, 1000);
+      ensureLiveTimer();
+      syncLiveMicUi();
     } catch (e) {
       await stopLive(false);
       toast(e.message || "无法使用麦克风，请检查浏览器权限");
@@ -849,12 +994,66 @@
       if (stream) stream.getTracks().forEach((t) => t.stop());
       liveStarting = false;
       btn.disabled = false;
+      syncLiveMicUi();
     }
   });
 
+  $("btn-live-resume").addEventListener("click", async () => {
+    if (!liveSessionId || liveCapturing || liveStarting || liveEnding) return;
+    if (!navigator.mediaDevices || !window.MediaRecorder) return toast("当前浏览器不支持页内录音");
+    const btn = $("btn-live-resume");
+    liveStarting = true;
+    btn.disabled = true;
+    syncLiveMicUi();
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!liveSessionId) return;
+      startLiveCapture(stream, liveSessionId);
+      stream = null;
+      if (!liveStartTs) liveStartTs = Date.now();
+      ensureLiveTimer();
+      saveLiveCheckpoint();
+    } catch (e) {
+      toast(e.message || "无法使用麦克风，请检查浏览器权限");
+    } finally {
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      liveStarting = false;
+      btn.disabled = false;
+      syncLiveMicUi();
+    }
+  });
+
+  function enqueueLiveChunk(chunk) {
+    const keepalive = liveUseKeepalive;
+    liveUseKeepalive = false;
+    const fail = () => {
+      liveFailedChunks.push(chunk);
+      toast("第 " + (chunk.seq + 1) + " 段上传失败，结束时将重试；该段暂未计入纪要");
+    };
+    saveLiveCheckpoint();
+    if (keepalive) {
+      const fd = new FormData();
+      fd.append("session_id", chunk.sid);
+      fd.append("seq", String(chunk.seq));
+      fd.append("audio", chunk.blob, chunk.filename);
+      const headers = {};
+      if (token()) headers["Authorization"] = "Bearer " + token();
+      // 页面即将被丢掉时，普通请求可能发不出去；keepalive 只用于这一段。
+      liveUploadQueue = liveUploadQueue.then(() =>
+        fetch("/api/live/chunk", { method: "POST", headers: headers, body: fd, keepalive: true })
+          .then((res) => { if (!res.ok) throw new Error("upload failed"); })
+      ).catch(fail);
+      return;
+    }
+    liveUploadQueue = liveUploadQueue.then(async () => {
+      try { await uploadChunkWithRetry(chunk); }
+      catch (e) { fail(); }
+    });
+  }
+
   function startLiveCapture(stream, sid) {
     const mime = pickMime();
-    liveSeq = 0;
     liveStream = stream;
     liveCapturing = true;
     const recordSegment = () => {
@@ -867,28 +1066,23 @@
       recorder.onstop = () => {
         clearTimeout(liveChunkTimerId);
         liveChunkTimerId = null;
-        if (liveRecorder === recorder) liveRecorder = null;
+        const wasCurrent = liveRecorder === recorder;
+        if (wasCurrent) liveRecorder = null;
         const actualMime = recorder.mimeType || mime || "audio/webm";
         const blob = new Blob(parts, { type: actualMime });
         if (blob.size) {
           const seq = liveSeq++;
           const ext = actualMime.includes("mp4") ? "m4a" : actualMime.includes("ogg") ? "ogg" : "webm";
-          const chunk = { blob, filename: "chunk" + seq + "." + ext, seq, sid };
-          // 绑定场次和序号，并顺序上传：网络慢时不能让后片先写入文字流。
-          liveUploadQueue = liveUploadQueue.then(async () => {
-            try { await uploadChunkWithRetry(chunk); }
-            catch (e) {
-              liveFailedChunks.push(chunk);
-              toast("第 " + (seq + 1) + " 段上传失败，结束时将重试；该段暂未计入纪要");
-            }
-          });
+          enqueueLiveChunk({ blob: blob, filename: "chunk" + seq + "." + ext, seq: seq, sid: sid });
         }
         resolveStopped();
-        if (liveCapturing && liveSessionId === sid) {
+        // 过期 recorder 的 onstop 不能再开下一段，否则会顶掉已经恢复的录音。
+        if (wasCurrent && liveCapturing && liveSessionId === sid && !livePageLeaving) {
           try { recordSegment(); }
           catch (e) {
             liveCapturing = false;
             stream.getTracks().forEach((t) => t.stop());
+            syncLiveMicUi();
             toast("麦克风录制中断，请结束本场并检查浏览器权限");
           }
         }
@@ -897,6 +1091,7 @@
         liveCapturing = false;
         clearTimeout(liveChunkTimerId);
         stream.getTracks().forEach((t) => t.stop());
+        syncLiveMicUi();
         toast("麦克风录制中断，请结束本场并检查浏览器权限");
       };
       // 每段停止并重新创建 recorder，保证每个文件包含独立媒体头。
@@ -907,7 +1102,9 @@
         if (recorder.state === "recording") recorder.stop();
       }, CHUNK_MS);
     };
+    liveRecordSegment = recordSegment;
     recordSegment();
+    syncLiveMicUi();
   }
 
   async function uploadChunkWithRetry(chunk) {
@@ -936,6 +1133,7 @@
       try {
         const f = await api("/api/live/" + sid + "/feed?after_seq=" + liveAfterSeq);
         if (sid !== liveSessionId || generation !== livePollGeneration) return;
+        if (typeof f.after_seq === "number" && f.after_seq + 1 > liveSeq) liveSeq = f.after_seq + 1;
         $("live-title").textContent = f.title || "实时问答";
         if (f.after_seq > liveAfterSeq) {
           liveAfterSeq = f.after_seq;
@@ -943,11 +1141,26 @@
         }
         renderQuestions(f.questions || []);
         if (f.status === "ended") {
+          clearLiveCheckpoint();
           stopLive(false).catch(() => {});
           $("btn-live-end").disabled = true;
           $("btn-live-end").textContent = "本场记录已结束";
         }
-      } catch (e) { /* 轮询失败静默，下次继续 */ }
+        syncLiveMicUi();
+      } catch (e) {
+        if (sid === liveSessionId && e && /场次不存在/.test(e.message || "")) {
+          clearLiveCheckpoint();
+          liveSessionId = null;
+          location.hash = "#/courses";
+          openCourses();
+        } else if (sid === liveSessionId && e && /过期|未登录/.test(e.message || "")) {
+          localStorage.removeItem("cn_token");
+          clearLiveCheckpoint();
+          liveSessionId = null;
+          location.hash = "";
+          show("view-auth");
+        }
+      }
       finally { polling = false; }
     };
     poll();
@@ -971,39 +1184,129 @@
     box.scrollTop = box.scrollHeight;
   }
 
-  function renderQuestions(qs) {
-    const box = $("q-list");
-    const html = qs.map((q) => {
-      const open = q.status === "open";
-      const aiBlock = q.ai_answer
-        ? '<div class="q-ai-answer"><span class="q-ai-label">AI 先行作答 · 基于本节课已讲内容</span>' + esc(q.ai_answer) + "</div>"
-        : "";
-      return '<div class="q-card ' + (open ? "open" : "answered") + '" data-qid="' + q.id + '">' +
-        '<div class="q-head"><span class="q-badge">' + (open ? "老师提问" : "已解答") + "</span>" +
-        '<span class="q-ai">AI 识别，仅供参考</span></div>' +
-        '<p class="q-question">' + esc(q.question) + "</p>" + aiBlock +
-        (open ? '<p class="q-wait">等待老师讲解…出现后会自动回填</p>'
-              : '<div class="q-answer">' + esc(q.answer) + "</div>") +
-        "</div>";
-    }).join("");
-    // 只有变化时才重绘，避免打断阅读
-    if (box.dataset.hash !== hashStr(html)) {
-      box.dataset.hash = hashStr(html);
-      box.innerHTML = html;
-    }
+  function classifyQuestion(q, now) {
+    const id = String(q.id);
+    const local = qLocal.get(id) || {};
+    const status = local.status || q.status || "open";
+    const serverAnswer = local.answer != null ? local.answer : (q.answer || "");
+    const text = qDraft.has(id) ? qDraft.get(id) : serverAnswer;
+    const createdAt = q.created_at ? q.created_at * 1000 : 0;
+    const timedOut = status === "open" && createdAt && now - createdAt >= QUESTION_WAIT_MS;
+    let phase = "open";
+    if (status === "dismissed" || qDismissed.has(id)) phase = "dismissed";
+    else if (status === "answered") phase = "answered";
+    else if (timedOut) phase = "timeout";
+    return {
+      id: id, question: q.question || "", ai_answer: q.ai_answer || "",
+      text: text, serverAnswer: serverAnswer, phase: phase, status: status, createdAt: createdAt,
+    };
   }
-  function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return String(h); }
+  function questionCardHtml(q) {
+    const open = q.phase === "open";
+    const badge = open ? "老师提问" : (q.phase === "timeout" ? "未识别到讲解" : (q.phase === "dismissed" ? "已收起" : "已解答"));
+    const ai = q.ai_answer
+      ? '<div class="q-ai-answer"><span class="q-ai-label">AI 先行作答 · 基于本节课已讲内容</span>' + esc(q.ai_answer) + "</div>"
+      : "";
+    const placeholder = open ? "等待老师讲解，也可以自己写"
+      : (q.phase === "timeout" ? "没识别到老师讲解，可以自己写" : "补记老师的讲解");
+    const dismiss = (open || q.phase === "timeout")
+      ? '<button type="button" class="q-btn" data-act="dismiss" data-qid="' + q.id + '">收起</button>' : "";
+    return '<div class="q-card ' + (open ? "open" : "answered") + '" data-qid="' + q.id + '">' +
+      '<div class="q-head"><span class="q-badge">' + badge + "</span>" +
+      '<span class="q-ai">AI 识别，仅供参考</span></div>' +
+      '<p class="q-question">' + esc(q.question) + "</p>" + ai +
+      '<textarea class="q-answer-input" data-qid="' + q.id + '" placeholder="' + placeholder + '">' +
+      esc(q.text) + "</textarea>" +
+      (open ? '<p class="q-wait">识别到讲解会自动填上，也可以直接改</p>' : "") +
+      '<div class="q-actions"><button type="button" class="q-btn" data-act="save" data-qid="' + q.id + '">记下讲解</button>' +
+      dismiss + "</div></div>";
+  }
+  function nextQuestionDelay(rows) {
+    const now = Date.now();
+    let wait = 0;
+    rows.forEach((q) => {
+      if (q.phase !== "open" || !q.createdAt) return;
+      const remain = q.createdAt + QUESTION_WAIT_MS - now;
+      if (remain > 0 && (!wait || remain + 40 < wait)) wait = remain + 40;
+    });
+    return wait;
+  }
+  function scheduleQuestionTick(rows, forceWait) {
+    clearTimeout(qTick);
+    qTick = null;
+    const delay = forceWait || nextQuestionDelay(rows || []);
+    if (!delay) return;
+    qTick = setTimeout(() => renderQuestions(lastQuestions), delay);
+  }
+  function renderQuestions(qs) {
+    lastQuestions = qs || [];
+    const activeEl = document.activeElement;
+    if (activeEl && activeEl.classList && activeEl.classList.contains("q-answer-input")) {
+      scheduleQuestionTick(null, 1500);
+      return;
+    }
+    const rows = lastQuestions.map((q) => classifyQuestion(q, Date.now()));
+    const active = [], archived = [];
+    rows.forEach((q) => { (q.phase === "open" ? active : archived).push(q); });
+    const sig = rows.map((q) => [q.id, q.phase, q.status, q.question, q.ai_answer, q.serverAnswer].join("\u0001")).join("\u0002") +
+      (qArchiveOpen ? "#o" : "");
+    const box = $("q-list");
+    scheduleQuestionTick(rows);
+    if (box.dataset.hash === sig) return;
+    box.dataset.hash = sig;
+    let html = active.map(questionCardHtml).join("");
+    if (archived.length) {
+      html += '<details id="q-archive" class="q-archive"' + (qArchiveOpen ? " open" : "") + ">" +
+        "<summary>已收起的提问（" + archived.length + "）</summary>" +
+        archived.map(questionCardHtml).join("") + "</details>";
+    }
+    box.innerHTML = html;
+  }
+  function saveQuestion(qid, text) {
+    qid = String(qid);
+    text = String(text || "").trim();
+    if (!text) return toast("先写一点老师的讲解");
+    qDraft.set(qid, text);
+    qLocal.set(qid, { status: "answered", answer: text });
+    renderQuestions(lastQuestions);
+    api("/api/live/questions/" + qid, { method: "POST", json: { answer: text, status: "answered" } })
+      .catch((e) => {
+        qLocal.delete(qid);
+        renderQuestions(lastQuestions);
+        toast(e.message || "没能记下讲解");
+      });
+  }
+  function dismissQuestion(qid) {
+    qid = String(qid);
+    qDismissed.add(qid);
+    qLocal.set(qid, { status: "dismissed" });
+    renderQuestions(lastQuestions);
+    api("/api/live/questions/" + qid, { method: "POST", json: { status: "dismissed" } })
+      .catch((e) => {
+        qDismissed.delete(qid);
+        qLocal.delete(qid);
+        renderQuestions(lastQuestions);
+        toast(e.message || "没能收起");
+      });
+  }
 
   async function stopLive(clearSession) {
-    clearInterval(livePollId); clearInterval(liveTimerId);
+    clearInterval(livePollId); clearInterval(liveTimerId); clearTimeout(qTick);
+    qTick = null;
     livePollId = liveTimerId = null;
     livePollGeneration++;
     clearTimeout(liveChunkTimerId);
     liveChunkTimerId = null;
     liveCapturing = false;
+    liveRecordSegment = null;
+    const hadSession = liveSessionId;
     const recorder = liveRecorder, stopped = liveRecorderDone, stream = liveStream;
     liveStream = null;
-    if (clearSession !== false) liveSessionId = null;
+    if (clearSession !== false) {
+      liveSessionId = null;
+      liveStartTs = 0;
+      if (hadSession) clearLiveCheckpoint();
+    }
     try {
       if (recorder && recorder.state !== "inactive") recorder.stop();
       // stop() 异步触发最终 dataavailable/onstop，必须等该段进入上传队列。
@@ -1036,7 +1339,10 @@
         toast("正在生成纪要…");
         const r = await api("/api/live/" + sid + "/end", { method: "POST" });
         const stillCurrent = liveSessionId === sid;
-        if (stillCurrent) liveSessionId = null;
+        if (stillCurrent) {
+          liveSessionId = null;
+          clearLiveCheckpoint();
+        }
         toast("纪要生成好了");
         if (stillCurrent) location.hash = "#/note/" + r.note_id;
       } catch (e) {
@@ -1053,6 +1359,36 @@
     });
   });
 
+  $("q-list").addEventListener("input", (e) => {
+    const el = e.target;
+    if (!el || !el.dataset || !el.dataset.qid) return;
+    qDraft.set(String(el.dataset.qid), el.value);
+    saveLiveCheckpoint();
+  });
+  $("q-list").addEventListener("click", (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("[data-act]") : null;
+    if (!btn) return;
+    const qid = btn.getAttribute("data-qid");
+    if (btn.getAttribute("data-act") === "dismiss") { dismissQuestion(qid); return; }
+    if (btn.getAttribute("data-act") !== "save") return;
+    let text = qDraft.get(String(qid)) || "";
+    const card = btn.closest ? btn.closest(".q-card") : null;
+    const input = card && card.querySelector ? card.querySelector("textarea") : null;
+    if (input) text = input.value;
+    saveQuestion(qid, text);
+  });
+  $("q-list").addEventListener("focusout", () => setTimeout(() => renderQuestions(lastQuestions), 0));
+  $("q-list").addEventListener("toggle", (e) => {
+    if (e.target && e.target.id === "q-archive") qArchiveOpen = !!e.target.open;
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushLiveCapture();
+    else onLiveVisible();
+  });
+  document.addEventListener("freeze", () => flushLiveCapture({ leaving: true, keepalive: true }));
+  window.addEventListener("pagehide", () => flushLiveCapture({ leaving: true, keepalive: true }));
+  window.addEventListener("pageshow", () => onLiveVisible());
   window.addEventListener("beforeunload", (e) => {
     if (!liveCapturing && !liveStarting && !liveEnding) return;
     e.preventDefault();

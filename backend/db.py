@@ -407,6 +407,41 @@ def answer_live_question(qid, answer):
         conn.close()
 
 
+def get_live_question(qid, user_id):
+    conn = _connect()
+    try:
+        return _row_to_dict(conn.execute(
+            "SELECT q.* FROM live_questions q"
+            " JOIN live_sessions s ON s.id = q.session_id"
+            " WHERE q.id=? AND s.user_id=?",
+            (qid, user_id)).fetchone())
+    finally:
+        conn.close()
+
+
+def update_live_question(qid, answer=None, status=None):
+    """手写讲解或收起卡片。status 为 answered / dismissed。"""
+    sets, args = [], []
+    if answer is not None:
+        sets.append("answer=?")
+        args.append(answer)
+    if status:
+        sets.append("status=?")
+        args.append(status)
+        if status == "answered":
+            sets.append("answered_at=?")
+            args.append(int(time.time()))
+    if not sets:
+        return
+    args.append(qid)
+    conn = _connect()
+    try:
+        conn.execute("UPDATE live_questions SET " + ", ".join(sets) + " WHERE id=?", args)
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def set_ai_answer(qid, ai_answer):
     """写入 AI 基于本节课已讲内容的先行作答（老师讲解出现前展示）。"""
     conn = _connect()

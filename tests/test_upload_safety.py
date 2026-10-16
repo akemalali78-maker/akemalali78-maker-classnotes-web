@@ -246,6 +246,25 @@ class UploadSafetyTests(unittest.TestCase):
                 "username": "test", "password": "original-pass"})
             self.assertEqual(response.status_code, 200, response.text)
 
+    def test_manual_question_answer_and_dismiss(self):
+        sid = self.new_live_session()
+        qid = module.db.create_live_question(sid, "什么是 RSI？")
+        saved = self.client.post(f"/api/live/questions/{qid}", headers=self.headers,
+                                 json={"answer": "相对强弱", "status": "answered"})
+        self.assertEqual(saved.status_code, 200, saved.text)
+        feed = self.client.get(f"/api/live/{sid}/feed", headers=self.headers)
+        row = feed.json()["questions"][0]
+        self.assertEqual(row["answer"], "相对强弱")
+        self.assertEqual(row["status"], "answered")
+        other = module.db.create_live_question(sid, "另一个问题")
+        dismissed = self.client.post(f"/api/live/questions/{other}", headers=self.headers,
+                                     json={"status": "dismissed"})
+        self.assertEqual(dismissed.status_code, 200, dismissed.text)
+        statuses = {q["id"]: q["status"] for q in self.client.get(f"/api/live/{sid}/feed", headers=self.headers).json()["questions"]}
+        self.assertEqual(statuses[other], "dismissed")
+        missing = self.client.post("/api/live/questions/99999", headers=self.headers, json={"status": "dismissed"})
+        self.assertEqual(missing.status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()

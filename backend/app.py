@@ -510,6 +510,32 @@ async def upload_live_chunk(session_id: str = Form(...),
             "new_questions": new_questions, "answered": answered}
 
 
+_Q_STATUS = ("answered", "dismissed")
+
+
+@app.post("/api/live/questions/{qid}")
+def update_live_question(qid: int, payload: dict, user=Depends(auth.get_current_user)):
+    """手写/改正老师讲解，或收起一张还在等的卡片。"""
+    row = db.get_live_question(qid, user["id"])
+    if not row:
+        raise HTTPException(404, "提问不存在")
+    sess = db.get_live_session(row["session_id"], user["id"])
+    if not sess or sess["status"] != "live":
+        raise HTTPException(400, "该场次已结束")
+    status = payload.get("status")
+    if status is not None and status not in _Q_STATUS:
+        raise HTTPException(400, "状态无效")
+    answer = payload.get("answer")
+    if answer is not None:
+        answer = str(answer).strip()
+    if answer and not status:
+        status = "answered"
+    if status is None and answer is None:
+        raise HTTPException(400, "没有要更新的内容")
+    db.update_live_question(qid, answer=answer, status=status)
+    return {"ok": True, "id": qid, "status": status or row["status"]}
+
+
 @app.get("/api/live/{sid}/feed")
 def live_feed(sid: str, after_seq: int = -1, user=Depends(auth.get_current_user)):
     """轮询增量：after_seq 之后的新文字 + 全部问答卡片。after_seq 为已收到的最大 seq，初始传 -1。"""
