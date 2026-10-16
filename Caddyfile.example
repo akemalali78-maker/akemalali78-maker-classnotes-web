@@ -1,0 +1,5 @@
+# 把下面这行换成你的真实域名（不要加 https://，不要末尾斜杠）
+# Caddy 会自动申请 Let's Encrypt 证书并续期
+your-domain.example.com {
+	reverse_proxy app:8000
+}

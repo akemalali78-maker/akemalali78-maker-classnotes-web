@@ -1,0 +1,12 @@
+.env
+data/
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+*.sqlite
+*.sqlite3
+Caddyfile
+*.tgz
+*.zip

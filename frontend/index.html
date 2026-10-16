@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FAFAF7">
+<title>课堂纪要</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- 顶栏 -->
+  <header id="topbar" class="hidden">
+    <button id="btn-back" class="icon-btn hidden" aria-label="返回">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12.5 4.5 7 10l5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div id="topbar-title" class="topbar-title"></div>
+    <button id="btn-theme" class="icon-btn" aria-label="切换深色模式">
+      <svg id="icon-moon" width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M16.5 12.5A7 7 0 0 1 7.5 3.5a7 7 0 1 0 9 9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <svg id="icon-sun" class="hidden" width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3.6" stroke="currentColor" stroke-width="1.6"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+  </header>
+
+  <main id="main">
+    <!-- 登录 / 注册 -->
+    <section id="view-auth" class="view">
+      <div class="auth-wrap">
+        <div class="brand">
+          <div class="brand-mark">
+            <svg width="30" height="30" viewBox="0 0 30 30" fill="none"><rect x="6" y="4" width="18" height="22" rx="3.5" stroke="currentColor" stroke-width="2"/><path d="M11 11.5h8M11 15.5h8M11 19.5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </div>
+          <h1>课堂纪要</h1>
+          <p class="brand-sub">录下课堂，带走重点</p>
+        </div>
+        <div class="auth-card">
+          <div class="auth-tabs">
+            <button class="auth-tab active" data-tab="login">登录</button>
+            <button class="auth-tab" data-tab="register">注册</button>
+          </div>
+          <label class="field"><span>用户名</span><input id="auth-username" type="text" autocomplete="username" placeholder="给自己起个名字"></label>
+          <label class="field"><span>密码</span><input id="auth-password" type="password" autocomplete="current-password" placeholder="至少 4 位"></label>
+          <label id="reg-code-field" class="field hidden"><span>注册邀请码</span><input id="reg-code" type="text" autocomplete="off" placeholder="请输入站主提供的邀请码"></label>
+          <button id="btn-auth" class="btn primary block">登录</button>
+          <p id="auth-error" class="form-error hidden"></p>
+        </div>
+        <p class="auth-foot">课程和纪要按账号隔离保存。录音及课表图片会发送至阿里云百炼处理；录音请先征得授课者同意。</p>
+      </div>
+    </section>
+
+    <!-- 课程列表 -->
+    <section id="view-courses" class="view hidden">
+      <div class="page-head head-row">
+        <div>
+          <h2 id="greet">我的课程</h2>
+          <p class="page-sub">本学期 · <span id="course-count">0</span> 门课</p>
+        </div>
+        <button id="btn-quick-record" class="btn primary">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><rect x="7" y="2.5" width="6" height="10" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          开始录音
+        </button>
+      </div>
+      <div id="course-list"></div>
+      <div class="import-bar">
+        <button id="btn-import-img" class="btn primary block">📷 截图导入课表</button>
+      </div>
+      <button id="fab-add" class="fab" aria-label="新建课程">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5v13M4.5 11h13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </section>
+
+    <!-- 课程详情 -->
+    <section id="view-course" class="view hidden">
+      <div class="course-hero">
+        <div>
+          <h2 id="course-name"></h2>
+          <p class="page-sub" id="course-meta"></p>
+        </div>
+        <span id="course-mode" class="mode-pill"></span>
+      </div>
+      <div class="course-actions">
+        <button id="btn-record" class="btn primary block big">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="7" y="2.5" width="6" height="10" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          开始记录
+        </button>
+        <button id="btn-live" class="btn block" style="margin-top:10px;background:var(--accent-soft);color:var(--accent)">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M10 3.5c-3.6 0-6.5 2.6-6.5 5.9 0 1.9 1 3.6 2.6 4.7l-.7 2.4 2.7-1.4c.6.2 1.2.2 1.9.2 3.6 0 6.5-2.6 6.5-5.9S13.6 3.5 10 3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="7.2" cy="9.4" r="1" fill="currentColor"/><circle cx="10" cy="9.4" r="1" fill="currentColor"/><circle cx="12.8" cy="9.4" r="1" fill="currentColor"/></svg>
+          实时问答模式
+        </button>
+        <div class="row-2">
+          <button id="btn-edit-course" class="btn ghost block">编辑课程</button>
+          <button id="btn-del-course" class="btn ghost danger block">删除课程</button>
+        </div>
+      </div>
+      <h3 class="section-title">课堂纪要</h3>
+      <div id="note-list"></div>
+    </section>
+
+    <!-- 录音 -->
+    <section id="view-record" class="view hidden">
+      <div class="rec-wrap">
+        <!-- 自动识别横幅：用户最在意的一步，置顶醒目展示 -->
+        <div id="rec-match" class="match-banner hidden">
+          <span class="match-check">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.2" stroke="currentColor" stroke-width="1.7"/><path d="m6.8 10.2 2.3 2.3 4.2-4.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <div class="match-text">
+            <div id="match-label" class="match-label"></div>
+            <div id="match-sub" class="match-sub"></div>
+          </div>
+          <button id="btn-switch-course" class="btn ghost small">换一门</button>
+        </div>
+        <div id="rec-stage" class="rec-stage">
+          <canvas id="wave" width="600" height="120"></canvas>
+          <button id="rec-btn" aria-label="开始录音">
+            <span class="rec-ring"></span>
+            <span class="rec-core">
+              <svg id="rec-icon-mic" width="34" height="34" viewBox="0 0 20 20" fill="none"><rect x="7" y="2.5" width="6" height="10" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <svg id="rec-icon-stop" class="hidden" width="30" height="30" viewBox="0 0 20 20" fill="none"><rect x="5" y="5" width="10" height="10" rx="2.5" fill="currentColor"/></svg>
+            </span>
+          </button>
+          <div id="rec-timer" class="rec-timer">00:00</div>
+          <p id="rec-hint" class="rec-hint">轻点开始，把手机放在离老师近一点的地方</p>
+        </div>
+        <div id="rec-processing" class="hidden">
+          <div class="steps">
+            <div class="step" data-s="1"><span class="step-dot"></span>上传录音</div>
+            <div class="step" data-s="2"><span class="step-dot"></span>语音转文字</div>
+            <div class="step" data-s="3"><span class="step-dot"></span>生成纪要</div>
+          </div>
+          <div class="skel-note">
+            <div class="skel line w40"></div>
+            <div class="skel line"></div>
+            <div class="skel line"></div>
+            <div class="skel line w70"></div>
+          </div>
+        </div>
+        <div class="rec-upload">
+          <p class="divider"><span>或者</span></p>
+          <label class="btn ghost block upload-label">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 13.5v-9M6 7.5 10 3.5l4 4M3.5 13.5v2a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            上传音频文件
+            <input id="file-input" type="file" accept="audio/*,.m4a,.mp3,.wav,.webm" class="hidden">
+          </label>
+          <p class="tiny-hint">支持 m4a / mp3 / wav / webm</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 实时问答模式 -->
+    <section id="view-live" class="view hidden">
+      <div class="live-wrap">
+        <div id="live-lobby">
+          <div class="live-lobby-card">
+            <p class="page-sub" style="margin:0">实时课堂问答</p>
+            <h2 id="live-course-name"></h2>
+            <p class="page-sub" id="live-course-meta"></p>
+          </div>
+          <button id="btn-live-start" class="btn primary block big">开始实时记录</button>
+          <p class="tiny-hint">每 30 秒自动上传一段录音 · 实时转写<br>检测到老师提问会弹出蓝色卡片，答案出现自动回填</p>
+        </div>
+        <div id="live-active" class="hidden">
+          <div class="live-status">
+            <span class="live-dot"></span>
+            <span id="live-title" class="live-title"></span>
+            <span id="live-timer" class="live-timer">00:00</span>
+          </div>
+          <div id="q-list"></div>
+          <h3 class="section-title">实时文字流</h3>
+          <div id="stream" class="stream"></div>
+          <button id="btn-live-end" class="btn danger-btn block" style="margin-top:18px">下课，结束并生成纪要</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 纪要详情 -->
+    <section id="view-note" class="view hidden">
+      <div class="note-head">
+        <h2 id="note-title"></h2>
+        <p class="page-sub" id="note-meta"></p>
+        <div class="note-toolbar">
+          <button id="btn-copy" class="tool-btn">
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><rect x="6.5" y="6.5" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M13.5 6.5v-2a1 1 0 0 0-1-1h-8a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h2" stroke="currentColor" stroke-width="1.7"/></svg>
+            复制
+          </button>
+          <button id="btn-play" class="tool-btn">
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M6.5 4.8v10.4L15.5 10 6.5 4.8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+            回听录音
+          </button>
+          <button id="btn-del-note" class="tool-btn danger">
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M4 5.5h12M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M6 5.5l.7 9.2a1.5 1.5 0 0 0 1.5 1.3h3.6a1.5 1.5 0 0 0 1.5-1.3L14 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            删除
+          </button>
+        </div>
+        <audio id="note-audio" class="hidden" controls></audio>
+      </div>
+      <article id="note-content" class="markdown"></article>
+      <details class="transcript">
+        <summary>查看原始转写文本</summary>
+        <p id="note-transcript"></p>
+      </details>
+    </section>
+  </main>
+
+  <!-- 课程表单（底部弹窗） -->
+  <div id="scrim" class="scrim hidden"></div>
+  <div id="sheet" class="sheet hidden" role="dialog">
+    <div class="sheet-handle"></div>
+    <h3 id="sheet-title">新建课程</h3>
+    <label class="field"><span>课程名</span><input id="f-name" type="text" placeholder="如：教育心理学"></label>
+    <label class="field"><span>上课星期</span>
+      <select id="f-weekday">
+        <option value="">不设置</option>
+        <option value="0">周一</option>
+        <option value="1">周二</option>
+        <option value="2">周三</option>
+        <option value="3">周四</option>
+        <option value="4">周五</option>
+        <option value="5">周六</option>
+        <option value="6">周日</option>
+      </select>
+    </label>
+    <div class="row-2" style="margin-top:0">
+      <label class="field"><span>开始时间</span><input id="f-start-time" type="time" value=""></label>
+      <label class="field"><span>结束时间</span><input id="f-end-time" type="time" value=""></label>
+    </div>
+    <p class="tiny-hint" style="text-align:left;margin:-6px 0 14px">设置后，点"开始录音"会自动识别是哪门课</p>
+    <label class="field"><span>考核方式</span>
+      <select id="f-mode">
+        <option value="考试">考试</option>
+        <option value="论文">论文</option>
+        <option value="PRE展示">PRE展示</option>
+      </select>
+    </label>
+    <label class="field"><span>学期开始日期</span><input id="f-start" type="date"></label>
+    <p class="tiny-hint">第几次课按"开学第几周 + 上课星期"自动推算</p>
+    <button id="btn-save-course" class="btn primary block">保存</button>
+  </div>
+
+  <!-- 截图导入课表（底部弹窗） -->
+  <div id="import-sheet" class="sheet hidden" role="dialog">
+    <div class="sheet-handle"></div>
+    <h3>截图导入课表</h3>
+    <div id="imp-step-upload">
+      <p class="page-sub" style="margin-bottom:14px">上传课表截图，AI 自动识别每门课的上课星期和时间，逐条确认后一键导入。</p>
+      <label class="btn primary block upload-label">
+        <input id="imp-file" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+        选择截图上传
+      </label>
+      <button id="imp-close" class="btn ghost block" style="margin-top:10px">取消</button>
+    </div>
+    <div id="imp-step-loading" class="hidden">
+      <div class="skel-card"><div class="skel line w40"></div><div class="skel line w70"></div></div>
+      <div class="skel-card"><div class="skel line w40"></div><div class="skel line w70"></div></div>
+      <p class="page-sub" style="text-align:center;margin-top:12px">正在识别课表，请稍候…</p>
+    </div>
+    <div id="imp-step-result" class="hidden">
+      <p class="page-sub" style="margin-bottom:12px">识别出 <b id="imp-count">0</b> 门课程，请逐条确认：</p>
+      <div id="imp-list"></div>
+      <div class="row-2" style="margin-top:6px">
+        <button id="imp-cancel" class="btn ghost block">取消</button>
+        <button id="imp-confirm" class="btn primary block">确认导入</button>
+      </div>
+    </div>
+    <div id="imp-step-error" class="hidden">
+      <div class="empty">
+        <h3>识别失败了</h3>
+        <p id="imp-err-msg">请重试</p>
+        <button id="imp-retry" class="btn primary">重新上传</button>
+        <div style="margin-top:10px"><button id="imp-manual" class="btn ghost">改为手动添加</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 课程选择器（录音页手动切换） -->
+  <div id="sheet-course" class="sheet hidden" role="dialog">
+    <div class="sheet-handle"></div>
+    <h3>换一门课</h3>
+    <button id="btn-new-event" class="pick-new">
+      <span class="pick-new-plus">＋</span>新建事项<span class="pick-new-sub">讲座 / 组会 / 临时课，不在课表上也能记</span>
+    </button>
+    <div id="pick-list" class="pick-list"></div>
+  </div>
+
+  <!-- 确认弹窗 -->
+  <div id="modal" class="modal hidden" role="dialog">
+    <div class="modal-card">
+      <h3 id="modal-title">确认删除？</h3>
+      <p id="modal-desc" class="page-sub"></p>
+      <div class="row-2">
+        <button id="modal-cancel" class="btn ghost block">取消</button>
+        <button id="modal-ok" class="btn danger-btn block">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

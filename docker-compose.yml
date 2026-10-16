@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # 数据库 + 上传音频全部落在宿主机 ./data，容器重建/升级不丢
+      - ./data:/app/data
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
