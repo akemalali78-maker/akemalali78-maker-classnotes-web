@@ -8,6 +8,8 @@
     root.setAttribute("data-theme", t);
     document.getElementById("icon-moon").classList.toggle("hidden", t === "dark");
     document.getElementById("icon-sun").classList.toggle("hidden", t !== "dark");
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", t === "dark" ? "#1A140C" : "#FFD000");
     localStorage.setItem("cn_theme", t);
   }
   applyTheme(localStorage.getItem("cn_theme") || "light");
@@ -124,6 +126,7 @@
       if (authTab === "register") payload.registration_code = $("reg-code").value.trim();
       const r = await api("/api/auth/" + authTab, { method: "POST", json: payload });
       localStorage.setItem("cn_token", r.token);
+      clearMemoryCache();
       location.hash = "#/courses";
       route();
     } catch (e) { err.textContent = e.message; err.classList.remove("hidden"); }
@@ -184,39 +187,80 @@
   }
 
   /* ---------- 课程列表 ---------- */
+  // 内存缓存：返回首页时先画上次的课表，网络只在后台刷新。
+  let coursesCache = null;
+  const notesCache = new Map();
+  const noteCache = new Map();
+  let navGen = 0;
+
+  function clearMemoryCache() {
+    coursesCache = null;
+    notesCache.clear();
+    noteCache.clear();
+  }
   function skelCards(n) {
     return Array.from({ length: n }, () =>
       '<div class="skel-card"><div class="skel line w40"></div><div class="skel line w70"></div></div>').join("");
   }
+  function rememberCourse(course) {
+    if (!course || course.id == null || !Array.isArray(coursesCache)) return;
+    coursesCache = coursesCache.some((c) => c.id === course.id)
+      ? coursesCache.map((c) => c.id === course.id ? course : c)
+      : [course].concat(coursesCache);
+  }
+  function forgetCourse(id) {
+    if (Array.isArray(coursesCache)) coursesCache = coursesCache.filter((c) => c.id !== id);
+    notesCache.delete(id);
+  }
+
+  function paintCourses(courses) {
+    const box = $("course-list");
+    const sig = courses.map((c) => [c.id, c.name, c.schedule_text, c.mode].join("\u0001")).join("\u0002") || "empty";
+    $("course-count").textContent = courses.length;
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
+    if (!courses.length) {
+      box.innerHTML =
+        '<div class="empty"><div class="empty-ill"></div>' +
+        "<h3>还没有课程</h3><p>把这学期的课加进来，<br>下次上课就能一键记录了。</p>" +
+        '<button class="btn primary" id="empty-add">添加第一门课</button></div>';
+      $("empty-add").addEventListener("click", () => openSheet());
+      return;
+    }
+    box.innerHTML = courses.map((c) =>
+      '<div class="course-card" data-id="' + c.id + '">' +
+      '<div class="course-ink">' + esc((c.name || "").slice(0, 1)) + "</div>" +
+      '<div class="course-info"><h3>' + esc(c.name) + "</h3><p>" +
+      esc(c.schedule_text || "未设置上课时间") + "</p></div>" +
+      '<span class="mode-pill">' + esc(c.mode) + "</span>" +
+      '<svg class="chev" width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M7.5 4.5 12.5 10l-5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      "</div>").join("");
+    document.querySelectorAll(".course-card").forEach((el) =>
+      el.addEventListener("click", () => { location.hash = "#/course/" + el.dataset.id; }));
+  }
 
   async function openCourses() {
+    const gen = ++navGen;
     show("view-courses", "课堂纪要", false);
     $("greet").textContent = greeting();
-    $("course-list").innerHTML = skelCards(3);
+    if (Array.isArray(coursesCache)) paintCourses(coursesCache);
+    else {
+      delete $("course-list").dataset.sig;
+      $("course-list").innerHTML = skelCards(3);
+    }
     try {
       const courses = await api("/api/courses");
-      $("course-count").textContent = courses.length;
-      if (!courses.length) {
-        $("course-list").innerHTML =
-          '<div class="empty"><div class="empty-ill"></div>' +
-          "<h3>还没有课程</h3><p>把这学期的课加进来，<br>下次上课就能一键记录了。</p>" +
-          '<button class="btn primary" id="empty-add">添加第一门课</button></div>';
-        $("empty-add").addEventListener("click", () => openSheet());
-        return;
-      }
-      $("course-list").innerHTML = courses.map((c) =>
-        '<div class="course-card" data-id="' + c.id + '">' +
-        '<div class="course-ink">' + esc(c.name.slice(0, 1)) + "</div>" +
-        '<div class="course-info"><h3>' + esc(c.name) + "</h3><p>" +
-        esc(c.schedule_text || "未设置上课时间") + "</p></div>" +
-        '<span class="mode-pill">' + esc(c.mode) + "</span>" +
-        '<svg class="chev" width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M7.5 4.5 12.5 10l-5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-        "</div>").join("");
-      document.querySelectorAll(".course-card").forEach((el) =>
-        el.addEventListener("click", () => { location.hash = "#/course/" + el.dataset.id; }));
+      if (gen !== navGen) return;
+      coursesCache = courses;
+      paintCourses(courses);
     } catch (e) {
-      if (/未登录|过期/.test(e.message)) { localStorage.removeItem("cn_token"); location.hash = ""; route(); }
-      else toast(e.message);
+      if (gen !== navGen) return;
+      if (/未登录|过期/.test(e.message)) {
+        localStorage.removeItem("cn_token");
+        clearMemoryCache();
+        location.hash = "";
+        route();
+      } else toast(e.message);
     }
   }
 
@@ -262,13 +306,15 @@
     if (!payload.name) return toast("课程名不能为空");
     try {
       let created = null;
-      if (editingId) await api("/api/courses/" + editingId, { method: "PUT", json: payload });
+      if (editingId) created = await api("/api/courses/" + editingId, { method: "PUT", json: payload });
       else created = await api("/api/courses", { method: "POST", json: payload });
+      rememberCourse(created);
       closeSheet();
       if (created && createForRecord) {
         // 从录音页新建事项：直接选为本次录音归属，不跳走
         createForRecord = false;
         allCourses = await api("/api/courses");
+        coursesCache = allCourses;
         const c = allCourses.find((x) => x.id === created.id) || created;
         setRecordCourse(c.id, "已创建《" + c.name + "》", "自定义事项 · 手动创建");
         toast("已创建并选中");
@@ -405,39 +451,72 @@
   });
 
   /* ---------- 课程详情 ---------- */
+  function courseMetaLine(course) {
+    return (course.schedule_text || "未设置上课时间") +
+      (course.start_date ? " · 开学 " + course.start_date : "");
+  }
+  function paintCourseHead(course) {
+    currentCourse = course;
+    $("topbar-title").textContent = course.name;
+    $("course-name").textContent = course.name;
+    $("course-meta").textContent = courseMetaLine(course);
+    $("course-mode").textContent = course.mode || "";
+  }
+  function paintNotes(notes) {
+    const box = $("note-list");
+    const sig = notes.map((n) => [n.id, n.title, n.recorded_at].join("\u0001")).join("\u0002") || "empty";
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
+    if (!notes.length) {
+      box.innerHTML =
+        '<div class="empty"><div class="empty-ill"></div>' +
+        "<h3>还没记过这门课</h3><p>下课铃响之前，点「开始记录」，<br>重点、考点、论文素材都帮你整理好。</p></div>";
+      return;
+    }
+    box.innerHTML = notes.map((n) => {
+      const plain = (n.content || "").replace(/[#*>-]/g, "").replace(/\n+/g, " ").slice(0, 60);
+      return '<div class="note-card" data-id="' + n.id + '">' +
+        "<h4>" + esc(n.title) + "</h4>" +
+        '<div class="meta">' + esc(n.recorded_at || "") + "</div>" +
+        (plain ? '<p class="peek">' + esc(plain) + "…</p>" : "") +
+        "</div>";
+    }).join("");
+    document.querySelectorAll(".note-card").forEach((el) =>
+      el.addEventListener("click", () => { location.hash = "#/note/" + el.dataset.id; }));
+  }
   async function openCourse(id) {
+    const gen = ++navGen;
     show("view-course", "", true);
-    $("note-list").innerHTML = skelCards(2);
+    const cachedCourse = (coursesCache || []).find((c) => c.id === id);
+    const cachedNotes = notesCache.get(id);
+    if (cachedCourse) paintCourseHead(cachedCourse);
+    else {
+      $("course-name").textContent = "";
+      $("course-meta").textContent = "";
+      $("course-mode").textContent = "";
+    }
+    if (cachedNotes) paintNotes(cachedNotes);
+    else {
+      delete $("note-list").dataset.sig;
+      $("note-list").innerHTML = skelCards(2);
+    }
     try {
-      const [course, notes] = await Promise.all([
-        api("/api/courses").then((cs) => cs.find((c) => c.id === id)),
+      const [courses, notes] = await Promise.all([
+        api("/api/courses"),
         api("/api/courses/" + id + "/notes"),
       ]);
+      if (gen !== navGen) return;
+      coursesCache = courses;
+      const course = courses.find((c) => c.id === id);
       if (!course) { location.hash = "#/courses"; return; }
-      currentCourse = course;
-      $("topbar-title").textContent = course.name;
-      $("course-name").textContent = course.name;
-      $("course-meta").textContent =
-        (course.schedule_text || "未设置上课时间") +
-        (course.start_date ? " · 开学 " + course.start_date : "");
-      $("course-mode").textContent = course.mode;
-      if (!notes.length) {
-        $("note-list").innerHTML =
-          '<div class="empty"><div class="empty-ill"></div>' +
-          "<h3>还没记过这门课</h3><p>下课铃响之前，点「开始记录」，<br>重点、考点、论文素材都帮你整理好。</p></div>";
-        return;
-      }
-      $("note-list").innerHTML = notes.map((n) => {
-        const plain = (n.content || "").replace(/[#*>-]/g, "").replace(/\n+/g, " ").slice(0, 60);
-        return '<div class="note-card" data-id="' + n.id + '">' +
-          "<h4>" + esc(n.title) + "</h4>" +
-          '<div class="meta">' + esc(n.recorded_at || "") + "</div>" +
-          (plain ? '<p class="peek">' + esc(plain) + "…</p>" : "") +
-          "</div>";
-      }).join("");
-      document.querySelectorAll(".note-card").forEach((el) =>
-        el.addEventListener("click", () => { location.hash = "#/note/" + el.dataset.id; }));
-    } catch (e) { toast(e.message); }
+      const list = Array.isArray(notes) ? notes : [];
+      notesCache.set(id, list);
+      paintCourseHead(course);
+      paintNotes(list);
+    } catch (e) {
+      if (gen !== navGen) return;
+      toast(e.message);
+    }
   }
 
   $("btn-record").addEventListener("click", () => {
@@ -448,6 +527,7 @@
     if (!currentCourse) return;
     confirmDlg("删除这门课？", "《" + currentCourse.name + "》的全部纪要和录音都会被删除。", "删除", async () => {
       await api("/api/courses/" + currentCourse.id, { method: "DELETE" });
+      forgetCourse(currentCourse.id);
       toast("已删除");
       location.hash = "#/courses";
     });
@@ -525,6 +605,7 @@
     recordCourseId = null;
     try {
       allCourses = await api("/api/courses");
+      coursesCache = allCourses;
       if (!allCourses.length) {
         toast("先添加一门课程吧");
         openSheet();
@@ -730,21 +811,43 @@
   }
 
   /* ---------- 纪要详情 ---------- */
-  async function openNote(id) {
-    show("view-note", "", true);
-    try {
-      const n = await api("/api/notes/" + id);
-      currentNote = n;
-      $("topbar-title").textContent = "课堂纪要";
-      $("note-title").textContent = n.title;
-      $("note-meta").textContent = (n.recorded_at || "") + " · 第" + n.session_no + "次课";
-      $("note-content").innerHTML = renderMarkdown(n.content);
-      $("note-transcript").textContent = n.transcript || "（无转写文本）";
-      const hasAudio = !!n.audio_path;
-      $("btn-play").style.display = hasAudio ? "" : "none";
+  function paintNote(n) {
+    const prev = currentNote;
+    const same = prev && prev.id === n.id && prev.title === n.title &&
+      prev.content === n.content && prev.transcript === n.transcript;
+    currentNote = n;
+    $("topbar-title").textContent = "课堂纪要";
+    $("note-title").textContent = n.title || "";
+    $("note-meta").textContent = (n.recorded_at || "") + " · 第" + n.session_no + "次课";
+    if (!same) $("note-content").innerHTML = renderMarkdown(n.content);
+    $("note-transcript").textContent = n.transcript || "（无转写文本）";
+    const hasAudio = !!n.audio_path;
+    $("btn-play").style.display = hasAudio ? "" : "none";
+    if (!same) {
       $("note-audio").classList.add("hidden");
       $("note-audio").removeAttribute("src");
-    } catch (e) { toast(e.message); }
+    }
+  }
+  async function openNote(id) {
+    const gen = ++navGen;
+    show("view-note", "", true);
+    const cached = noteCache.get(id);
+    if (cached) paintNote(cached);
+    else {
+      $("note-title").textContent = "";
+      $("note-meta").textContent = "";
+      $("note-content").innerHTML = "";
+      $("note-transcript").textContent = "";
+    }
+    try {
+      const n = await api("/api/notes/" + id);
+      if (gen !== navGen) return;
+      noteCache.set(id, n);
+      paintNote(n);
+    } catch (e) {
+      if (gen !== navGen) return;
+      toast(e.message);
+    }
   }
 
   $("btn-copy").addEventListener("click", async () => {
@@ -781,7 +884,12 @@
   $("btn-del-note").addEventListener("click", () => {
     if (!currentNote) return;
     confirmDlg("删除这篇纪要？", "《" + currentNote.title + "》及录音都会被删除。", "删除", async () => {
-      await api("/api/notes/" + currentNote.id, { method: "DELETE" });
+      const gone = currentNote;
+      await api("/api/notes/" + gone.id, { method: "DELETE" });
+      noteCache.delete(gone.id);
+      if (gone.course_id != null && notesCache.has(gone.course_id)) {
+        notesCache.set(gone.course_id, notesCache.get(gone.course_id).filter((n) => n.id !== gone.id));
+      }
       toast("已删除");
       history.back();
     });
@@ -907,28 +1015,39 @@
     }).catch(() => {});
   }
 
+  function paintLiveLobby(course) {
+    show("view-live", "实时问答", true);
+    $("topbar-title").textContent = "实时问答";
+    $("live-lobby").classList.remove("hidden");
+    $("live-active").classList.add("hidden");
+    $("live-course-name").textContent = "《" + course.name + "》";
+    $("live-course-meta").textContent = courseTimeText(course) + " · " + course.mode + "考核";
+    showWeChatTip();
+  }
   async function openLiveLobby(courseId) {
-    await stopLive();
+    // 停录在后台进行。有缓存就先把大厅画出来，不等尾段上传。
+    stopLive().catch(() => {});
+    const cached = (coursesCache || []).find((c) => c.id === courseId);
+    if (cached) {
+      liveCourseId = courseId;
+      paintLiveLobby(cached);
+    }
     try {
       const courses = await api("/api/courses");
+      coursesCache = courses;
       const course = courses.find((c) => c.id === courseId);
       if (!course) { location.hash = "#/courses"; return; }
       liveCourseId = courseId;
-      show("view-live", "实时问答", true);
-      $("topbar-title").textContent = "实时问答";
-      $("live-lobby").classList.remove("hidden");
-      $("live-active").classList.add("hidden");
-      $("live-course-name").textContent = "《" + course.name + "》";
-      $("live-course-meta").textContent = courseTimeText(course) + " · " + course.mode + "考核";
-      showWeChatTip();
+      paintLiveLobby(course);
     } catch (e) { toast(e.message); }
   }
 
   async function openLiveSession(sid) {
     // 开始录音后的 hashchange 会再进入这里，不能因此停掉刚开的麦克风。
-    // 真正刷新或切换场次时只轮询观看，不擅自重新录音。
+    // 换场次时停录放后台：同步解开旧场次，尾段仍按原 session 上传。
+    // 没有进行中的场次时 stopLive 不会清检查点，刷新恢复仍可读到它。
     if (sid !== liveSessionId) {
-      await stopLive();
+      stopLive().catch(() => {});
       liveSessionId = sid;
       liveSeq = 0;
       liveStartTs = 0;
@@ -984,7 +1103,9 @@
       $("live-title").textContent = s.title;
       startLiveCapture(stream, s.id);
       stream = null; // 由实时录音状态持有，结束时释放。
-      location.hash = "#/live/s/" + s.id;
+      // 盖掉大厅历史，返回时一步回到进来之前的页面，不再卡在大厅。
+      if (typeof location.replace === "function") location.replace("#/live/s/" + s.id);
+      else location.hash = "#/live/s/" + s.id;
       ensureLiveTimer();
       syncLiveMicUi();
     } catch (e) {
@@ -1155,6 +1276,7 @@
           openCourses();
         } else if (sid === liveSessionId && e && /过期|未登录/.test(e.message || "")) {
           localStorage.removeItem("cn_token");
+          clearMemoryCache();
           clearLiveCheckpoint();
           liveSessionId = null;
           location.hash = "";
