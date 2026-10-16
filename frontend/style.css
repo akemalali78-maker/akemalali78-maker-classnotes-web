@@ -555,19 +555,37 @@ h3.section-title { font-size: 14px; font-weight: 600; color: var(--text-2); marg
 .q-ai-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .08em; margin-bottom: 4px; }
 .q-card.open .q-ai-label { color: #BCD4EF; }
 .q-card.answered .q-ai-label { color: #2C4E7E; }
-.q-answer {
-  margin: 12px 0 0; padding: 12px 14px;
-  background: #F6F8FB; border-radius: var(--radius-s);
-  font-size: 14.5px; line-height: 1.7; color: var(--text);
-  border-left: 3px solid #2C4E7E;
-  animation: fadeUp .4s ease;
-}
-[data-theme="dark"] .q-answer { background: rgba(255, 255, 255, .05); }
-.q-answer::before { content: "老师讲解"; display: block; font-size: 11px; font-weight: 700; letter-spacing: .08em; color: #2C4E7E; margin-bottom: 4px; }
-[data-theme="dark"] .q-answer::before { color: var(--accent); }
 .q-wait { font-size: 13px; margin: 10px 0 0; }
 .q-card.open .q-wait { color: #BCD4EF; }
 .q-card.answered .q-wait { color: var(--text-2); }
+.q-answer-input {
+  display: block; width: 100%; box-sizing: border-box;
+  margin-top: 10px; min-height: 68px; resize: vertical;
+  border-radius: 12px; padding: 10px 12px;
+  font: inherit; font-size: 14.5px; line-height: 1.6;
+}
+.q-card.open .q-answer-input {
+  color: #fff; background: rgba(255, 255, 255, .12);
+  border: 1px solid rgba(255, 255, 255, .3);
+}
+.q-card.open .q-answer-input::placeholder { color: rgba(255, 255, 255, .65); }
+.q-card.answered .q-answer-input {
+  color: var(--text); background: var(--surface); border: 1px solid var(--border);
+}
+.q-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.q-btn {
+  border: 0; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 700; padding: 6px 12px;
+}
+.q-card.open .q-btn { background: rgba(255, 255, 255, .16); color: #fff; }
+.q-card.answered .q-btn { background: var(--surface-2); color: var(--text); }
+.q-archive { margin-top: 8px; }
+.q-archive summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-2); padding: 8px 2px; }
+.live-mic-status {
+  margin: 12px 0 0; padding: 10px 12px; border-radius: 12px;
+  background: var(--surface-2); color: var(--text-2); font-size: 13px; line-height: 1.55;
+}
+#btn-live-resume { margin-top: 10px; }
 
 /* 实时文字流 */
 .stream {

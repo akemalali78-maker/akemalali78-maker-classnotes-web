@@ -13,7 +13,7 @@ const deferred = () => {
 
 function harness(customFetch) {
   const elements = new Map(), timers = new Map(), storage = new Map();
-  const records = [], recorders = [], windowEvents = {};
+  const records = [], recorders = [], windowEvents = {}, docEvents = {};
   let timerId = 0;
   function element(id) {
     if (elements.has(id)) return elements.get(id);
@@ -66,18 +66,20 @@ function harness(customFetch) {
     console, Blob, FormData, URL, Date, Promise, MediaRecorder: Recorder, AudioContext,
     document: {
       documentElement: element("root"),
+      visibilityState: "visible",
       getElementById: element,
       querySelectorAll: (selector) => selector === ".auth-tab" ? tabs : [],
       querySelector: (selector) => element(selector),
       createElement: (tag) => element("created-" + tag),
+      addEventListener: (event, fn) => (docEvents[event] ||= []).push(fn),
     },
     localStorage: {
       getItem: (key) => storage.get(key) || null,
       setItem: (key, val) => storage.set(key, String(val)), removeItem: (key) => storage.delete(key),
     },
     location: { hash: "" }, history: { back() {} },
-    navigator: { mediaDevices: { getUserMedia: async () => {
-      const track = { stops: 0, stop() { this.stops++; } };
+    navigator: { userAgent: "", mediaDevices: { getUserMedia: async () => {
+      const track = { stops: 0, readyState: "live", stop() { this.stops++; this.readyState = "ended"; } };
       const stream = { track, getTracks: () => [track] };
       streams.push(stream); return stream;
     } } },
@@ -105,8 +107,8 @@ function harness(customFetch) {
   context.scrollTo = () => {};
   const source = fs.readFileSync(path.join(__dirname, "../frontend/app.js"), "utf8").replace(
     "/* ---------- 启动 ---------- */",
-    `globalThis.testHooks = { route, openLiveLobby, stopLive, openRecord, stopRecTracks,
-      state: () => ({ liveSessionId, liveRecorder, liveCapturing, liveEnding, liveUploadQueue, liveFailedChunks }) };
+    `globalThis.testHooks = { route, openLiveLobby, stopLive, openRecord, stopRecTracks, renderQuestions, saveQuestion,
+      state: () => ({ liveSessionId, liveRecorder, liveCapturing, liveEnding, liveUploadQueue, liveFailedChunks, liveSeq }) };
      /* ---------- 启动 ---------- */`
   );
   vm.runInNewContext(source, context, { filename: "app.js" });
@@ -116,7 +118,7 @@ function harness(customFetch) {
     assert.ok(found, "expected timer " + ms);
     timers.delete(found[0]); found[1].fn();
   };
-  return { context, element, tabs, click, runTimer, records, recorders, streams, storage, timers };
+  return { context, element, tabs, click, runTimer, records, recorders, streams, storage, timers, docEvents, windowEvents };
 }
 
 async function start(h) {
@@ -281,4 +283,127 @@ async function start(h) {
   assert.equal(failure.element("btn-live-end").disabled, false);
   assert.equal(failure.context.testHooks.state().liveFailedChunks.length, 1);
   console.log("PASS: unrecoverable final chunk prevents silent incomplete summary; retry remains available");
+
+  const fire = (bag, name) => { for (const fn of bag[name] || []) fn({}); };
+
+  const keep = harness();
+  keep.storage.set("cn_token", "test-token");
+  keep.context.location.hash = "";
+  await keep.context.testHooks.route();
+  assert.equal(keep.element("view-auth").classList.contains("hidden"), true);
+  assert.equal(keep.element("view-courses").classList.contains("hidden"), false);
+  console.log("PASS: valid token still opens the course list after a reload");
+
+  const back = harness();
+  back.storage.set("cn_token", "test-token");
+  back.storage.set("cn_live", JSON.stringify({ sid: "abc123", courseId: 1, startTs: Date.now() - 8000, seq: 4 }));
+  back.context.location.hash = "";
+  await back.context.testHooks.route();
+  assert.equal(back.context.location.hash, "#/live/s/abc123");
+  assert.equal(back.element("view-live").classList.contains("hidden"), false);
+  assert.equal(back.element("view-courses").classList.contains("hidden"), true);
+  assert.equal(back.element("view-auth").classList.contains("hidden"), true);
+  assert.equal(back.element("btn-live-resume").classList.contains("hidden"), false);
+  assert.equal(back.context.testHooks.state().liveSeq, 4);
+  assert.equal(back.context.testHooks.state().liveCapturing, false);
+  console.log("PASS: reload restores the checkpointed live session instead of the empty home");
+
+  const ended = harness((url) => {
+    if (String(url).startsWith("/api/live/abc123/feed")) {
+      return { ok: true, json: async () => ({ status: "ended", title: "已结束", after_seq: -1, chunks: [], questions: [] }) };
+    }
+  });
+  ended.storage.set("cn_token", "test-token");
+  ended.storage.set("cn_live", JSON.stringify({ sid: "abc123", courseId: 1, startTs: 1, seq: 1 }));
+  ended.context.location.hash = "";
+  await ended.context.testHooks.route();
+  await flush();
+  assert.equal(ended.storage.get("cn_live"), undefined);
+  assert.equal(ended.element("btn-live-end").disabled, true);
+  assert.equal(ended.element("btn-live-resume").classList.contains("hidden"), true);
+  console.log("PASS: an ended server session clears the checkpoint and does not offer resume");
+
+  const srv = harness((url, opts) => {
+    if (url === "/api/live/sessions" && (!opts.method || opts.method === "GET")) {
+      return { ok: true, json: async () => [{ id: "abc123", status: "live", created_at: 10, course_id: 1, title: "场次" }] };
+    }
+  });
+  srv.storage.set("cn_token", "test-token");
+  srv.context.location.hash = "#/courses";
+  await srv.context.testHooks.route();
+  assert.equal(srv.context.location.hash, "#/live/s/abc123");
+  assert.equal(srv.element("view-live").classList.contains("hidden"), false);
+  console.log("PASS: landing with no checkpoint reopens a live session that is still on the server");
+
+  const vis = harness();
+  await start(vis);
+  assert.equal(JSON.parse(vis.storage.get("cn_live")).sid, "abc123");
+  vis.context.document.visibilityState = "hidden";
+  fire(vis.docEvents, "visibilitychange");
+  assert.equal(vis.recorders[0].stopPending, true, "hiding flushes the open recorder");
+  vis.recorders[0].flushStop();
+  await flush();
+  assert.ok(vis.records.some((r) => r.url === "/api/live/chunk"));
+  assert.equal(vis.recorders.length, 2);
+  assert.equal(vis.records.find((r) => r.url === "/api/live/chunk").opts.keepalive, undefined);
+  vis.streams[0].track.readyState = "ended";
+  vis.context.document.visibilityState = "visible";
+  fire(vis.docEvents, "visibilitychange");
+  if (vis.recorders[1].stopPending) vis.recorders[1].flushStop();
+  await flush();
+  assert.equal(vis.context.testHooks.state().liveCapturing, false);
+  assert.equal(vis.element("btn-live-resume").classList.contains("hidden"), false);
+  const posts = vis.records.filter((r) => r.url === "/api/live/sessions").length;
+  await vis.click("btn-live-resume");
+  await flush();
+  assert.equal(vis.context.testHooks.state().liveCapturing, true);
+  assert.equal(vis.records.filter((r) => r.url === "/api/live/sessions").length, posts);
+  assert.equal(vis.recorders[vis.recorders.length - 1].state, "recording");
+  console.log("PASS: hide flushes a chunk; a dead mic shows resume without opening a second session");
+
+  const leavingPage = harness();
+  await start(leavingPage);
+  fire(leavingPage.windowEvents, "pagehide");
+  assert.equal(leavingPage.recorders[0].stopPending, true);
+  leavingPage.recorders[0].flushStop();
+  await flush();
+  assert.equal(leavingPage.recorders.length, 1);
+  const kept = leavingPage.records.find((r) => r.url === "/api/live/chunk");
+  assert.equal(kept.opts.keepalive, true);
+  assert.equal(kept.opts.body.get("session_id"), "abc123");
+  console.log("PASS: pagehide flushes the current chunk with keepalive and does not start another");
+
+  const cards = harness();
+  const nowSec = Math.floor(Date.now() / 1000);
+  cards.context.testHooks.renderQuestions([
+    { id: 7, question: "什么是 RSI？", ai_answer: "草稿", answer: "", status: "open", created_at: nowSec },
+  ]);
+  let html = cards.element("q-list").innerHTML;
+  assert.match(html, /<textarea/);
+  assert.match(html, /也可以自己写/);
+  assert.match(html, /老师提问/);
+  assert.equal(html.includes("q-archive"), false);
+  assert.equal(html.includes("出现后会自动回填"), false);
+  cards.context.testHooks.saveQuestion(7, "相对强弱");
+  await flush();
+  html = cards.element("q-list").innerHTML;
+  assert.match(html, /q-archive/);
+  assert.match(html, /已解答/);
+  assert.equal(JSON.parse(cards.records.find((r) => r.url === "/api/live/questions/7").opts.body).answer, "相对强弱");
+  cards.context.testHooks.renderQuestions([
+    { id: 8, question: "旧问题", ai_answer: "", answer: "", status: "open", created_at: nowSec - 120 },
+  ]);
+  html = cards.element("q-list").innerHTML;
+  assert.match(html, /未识别到讲解/);
+  assert.match(html, /q-archive/);
+  assert.equal(/class="q-card open"/.test(html), false);
+  console.log("PASS: teacher cards are editable, answered cards archive, and stale cards time out");
+
+  const wx = harness();
+  wx.context.navigator.userAgent = "Mozilla/5.0 MicroMessenger/8.0";
+  wx.storage.set("cn_token", "test-token");
+  wx.context.location.hash = "#/live/1";
+  await wx.context.testHooks.openLiveLobby(1);
+  assert.equal(wx.element("wechat-tip-lobby").classList.contains("hidden"), false);
+  console.log("PASS: WeChat user agent shows a one-line system-browser tip");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

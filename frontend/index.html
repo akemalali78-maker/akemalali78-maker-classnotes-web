@@ -157,7 +157,8 @@
             <p class="page-sub" id="live-course-meta"></p>
           </div>
           <button id="btn-live-start" class="btn primary block big">开始实时记录</button>
-          <p class="tiny-hint">每 30 秒自动上传一段录音 · 实时转写<br>检测到老师提问会弹出蓝色卡片，答案出现自动回填</p>
+          <p class="tiny-hint">每 30 秒自动上传一段录音 · 实时转写<br>检测到老师提问会弹出卡片，讲解会自动填上，也可以自己改</p>
+          <p id="wechat-tip-lobby" class="tiny-hint wechat-tip hidden">微信里录音容易被中断，建议用右上角菜单在系统浏览器中打开。</p>
         </div>
         <div id="live-active" class="hidden">
           <div class="live-status">
@@ -165,6 +166,9 @@
             <span id="live-title" class="live-title"></span>
             <span id="live-timer" class="live-timer">00:00</span>
           </div>
+          <p id="wechat-tip-live" class="tiny-hint wechat-tip hidden">微信里录音容易被中断，建议用右上角菜单在系统浏览器中打开。</p>
+          <p id="live-mic-status" class="live-mic-status hidden"></p>
+          <button id="btn-live-resume" class="btn ghost block hidden">继续录音</button>
           <div id="q-list"></div>
           <h3 class="section-title">实时文字流</h3>
           <div id="stream" class="stream"></div>
